@@ -1,8 +1,6 @@
 import dotenv from "dotenv";
-dotenv.config();
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
-import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,8 +10,9 @@ import { z } from "zod";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
-const db = new Database("artisan.db");
+const db = new Database(path.resolve(__dirname, "..", "artisan.db"));
 const JWT_SECRET = process.env.JWT_SECRET || "artisan-sahayak-secret-key";
 
 // Initialize database
@@ -136,7 +135,7 @@ const productSchema = z.object({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3001;
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -353,17 +352,19 @@ async function startServer() {
 
   app.use(errorHandler);
 
-  // --- Vite / Static ---
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+  // --- Static Frontend (production only) ---
+  const frontendDir = path.resolve(__dirname, "..", "frontend");
+  if (process.env.NODE_ENV === "production") {
+    app.use(express.static(path.join(frontendDir, "dist")));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      if (req.path.startsWith("/api")) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      res.sendFile(path.join(frontendDir, "dist", "index.html"));
+    });
+  } else {
+    app.get("/", (req, res) => {
+      res.json({ status: "backend-api-ready" });
     });
   }
 
